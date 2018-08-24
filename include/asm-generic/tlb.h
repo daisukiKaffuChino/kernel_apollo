@@ -146,6 +146,8 @@
  *  Use this if your architecture lacks an efficient flush_tlb_range().
  */
 
+#ifdef CONFIG_MMU
+
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
 /*
  * Semi RCU freeing of the page directories.
@@ -622,5 +624,7 @@ static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vm
 #endif
 
 #endif /* CONFIG_MMU */
+
+#define tlb_migrate_finish(mm) do {} while (0)
 
 #endif /* _ASM_GENERIC__TLB_H */
