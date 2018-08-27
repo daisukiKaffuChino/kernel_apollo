@@ -21,131 +21,6 @@
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 
-/*
- * Blindly accessing user memory from NMI context can be dangerous
- * if we're in the middle of switching the current user task or switching
- * the loaded mm.
- */
-#ifndef nmi_uaccess_okay
-# define nmi_uaccess_okay() true
-#endif
-
-#ifdef CONFIG_MMU
-
-/*
- * Generic MMU-gather implementation.
- *
- * The mmu_gather data structure is used by the mm code to implement the
- * correct and efficient ordering of freeing pages and TLB invalidations.
- *
- * This correct ordering is:
- *
- *  1) unhook page
- *  2) TLB invalidate page
- *  3) free page
- *
- * That is, we must never free a page before we have ensured there are no live
- * translations left to it. Otherwise it might be possible to observe (or
- * worse, change) the page content after it has been reused.
- *
- * The mmu_gather API consists of:
- *
- *  - tlb_gather_mmu() / tlb_finish_mmu(); start and finish a mmu_gather
- *
- *    Finish in particular will issue a (final) TLB invalidate and free
- *    all (remaining) queued pages.
- *
- *  - tlb_start_vma() / tlb_end_vma(); marks the start / end of a VMA
- *
- *    Defaults to flushing at tlb_end_vma() to reset the range; helps when
- *    there's large holes between the VMAs.
- *
- *  - tlb_remove_page() / __tlb_remove_page()
- *  - tlb_remove_page_size() / __tlb_remove_page_size()
- *
- *    __tlb_remove_page_size() is the basic primitive that queues a page for
- *    freeing. __tlb_remove_page() assumes PAGE_SIZE. Both will return a
- *    boolean indicating if the queue is (now) full and a call to
- *    tlb_flush_mmu() is required.
- *
- *    tlb_remove_page() and tlb_remove_page_size() imply the call to
- *    tlb_flush_mmu() when required and has no return value.
- *
- *  - tlb_change_page_size()
- *
- *    call before __tlb_remove_page*() to set the current page-size; implies a
- *    possible tlb_flush_mmu() call.
- *
- *  - tlb_flush_mmu() / tlb_flush_mmu_tlbonly()
- *
- *    tlb_flush_mmu_tlbonly() - does the TLB invalidate (and resets
- *                              related state, like the range)
- *
- *    tlb_flush_mmu() - in addition to the above TLB invalidate, also frees
- *			whatever pages are still batched.
- *
- *  - mmu_gather::fullmm
- *
- *    A flag set by tlb_gather_mmu() to indicate we're going to free
- *    the entire mm; this allows a number of optimizations.
- *
- *    - We can ignore tlb_{start,end}_vma(); because we don't
- *      care about ranges. Everything will be shot down.
- *
- *    - (RISC) architectures that use ASIDs can cycle to a new ASID
- *      and delay the invalidation until ASID space runs out.
- *
- *  - mmu_gather::need_flush_all
- *
- *    A flag that can be set by the arch code if it wants to force
- *    flush the entire TLB irrespective of the range. For instance
- *    x86-PAE needs this when changing top-level entries.
- *
- * And allows the architecture to provide and implement tlb_flush():
- *
- * tlb_flush() may, in addition to the above mentioned mmu_gather fields, make
- * use of:
- *
- *  - mmu_gather::start / mmu_gather::end
- *
- *    which provides the range that needs to be flushed to cover the pages to
- *    be freed.
- *
- *  - mmu_gather::freed_tables
- *
- *    set when we freed page table pages
- *
- *  - tlb_get_unmap_shift() / tlb_get_unmap_size()
- *
- *    returns the smallest TLB entry size unmapped in this range.
- *
- * If an architecture does not provide tlb_flush() a default implementation
- * based on flush_tlb_range() will be used, unless MMU_GATHER_NO_RANGE is
- * specified, in which case we'll default to flush_tlb_mm().
- *
- * Additionally there are a few opt-in features:
- *
- *  HAVE_MMU_GATHER_PAGE_SIZE
- *
- *  This ensures we call tlb_flush() every time tlb_change_page_size() actually
- *  changes the size and provides mmu_gather::page_size to tlb_flush().
- *
- *  HAVE_RCU_TABLE_FREE
- *
- *  This provides tlb_remove_table(), to be used instead of tlb_remove_page()
- *  for page directores (__p*_free_tlb()). This provides separate freeing of
- *  the page-table pages themselves in a semi-RCU fashion (see comment below).
- *  Useful if your architecture doesn't use IPIs for remote TLB invalidates
- *  and therefore doesn't naturally serialize with software page-table walkers.
- *
- *  When used, an architecture is expected to provide __tlb_remove_table()
- *  which does the actual freeing of these pages.
- *
- *  MMU_GATHER_NO_RANGE
- *
- *  Use this if your architecture lacks an efficient flush_tlb_range().
- */
-
 #ifdef CONFIG_MMU
 
 /*
@@ -578,30 +453,19 @@ static inline unsigned long tlb_get_unmap_size(struct mmu_gather *tlb)
  * the vmas are adjusted to only cover the region to be torn down.
  */
 #ifndef tlb_start_vma
-static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
-{
-	if (tlb->fullmm)
-		return;
-
-	tlb_update_vma_flags(tlb, vma);
-	flush_cache_range(vma, vma->vm_start, vma->vm_end);
-}
+#define tlb_start_vma(tlb, vma)						\
+do {									\
+	if (!tlb->fullmm)						\
+		flush_cache_range(vma, vma->vm_start, vma->vm_end);	\
+} while (0)
 #endif
 
 #ifndef tlb_end_vma
-static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
-{
-	if (tlb->fullmm)
-		return;
-
-	/*
-	 * Do a TLB flush and reset the range at VMA boundaries; this avoids
-	 * the ranges growing with the unused space between consecutive VMAs,
-	 * but also the mmu_gather::vma_* flags from tlb_start_vma() rely on
-	 * this.
-	 */
-	tlb_flush_mmu_tlbonly(tlb);
-}
+#define tlb_end_vma(tlb, vma)						\
+do {									\
+	if (!tlb->fullmm)						\
+		tlb_flush_mmu_tlbonly(tlb);				\
+} while (0)
 #endif
 
 #ifndef __tlb_remove_tlb_entry
