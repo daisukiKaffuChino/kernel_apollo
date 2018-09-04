@@ -79,24 +79,5 @@ tlb_flush_pmd_range(struct mmu_gather *tlb, unsigned long address,
 	tlb_add_flush(tlb, address + size - PMD_SIZE);
 }
 
-#define pte_free_tlb(tlb, ptep, addr)	__pte_free_tlb(tlb, ptep, addr)
-#define pmd_free_tlb(tlb, pmdp, addr)	__pmd_free_tlb(tlb, pmdp, addr)
-#define pud_free_tlb(tlb, pudp, addr)	pud_free((tlb)->mm, pudp)
-
-#define tlb_migrate_finish(mm)		do { } while (0)
-
-static inline void tlb_change_page_size(struct mmu_gather *tlb,
-						     unsigned int page_size)
-{
-}
-
-static inline void tlb_flush_remove_tables(struct mm_struct *mm)
-{
-}
-
-static inline void tlb_flush_remove_tables_local(void *arg)
-{
-}
-
 #endif /* CONFIG_MMU */
 #endif
