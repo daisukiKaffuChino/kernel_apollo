@@ -13,8 +13,10 @@
 
 extern void set_mmu_pid(unsigned long pid);
 
-#define tlb_end_vma(tlb, vma)	do { } while (0)
-#define __tlb_remove_tlb_entry(tlb, ptep, address)	do { } while (0)
+/*
+ * NIOS32 does have flush_tlb_range(), but it lacks a limit and fallback to
+ * full mm invalidation. So use flush_tlb_mm() for everything.
+ */
 
 #include <linux/pagemap.h>
 #include <asm-generic/tlb.h>
