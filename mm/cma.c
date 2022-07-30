@@ -488,12 +488,15 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 				bitmap_maxno, start, bitmap_count, mask,
 				offset);
 		if (bitmap_no >= bitmap_maxno) {
-			if ((num_attempts < max_retries) && (ret == -EBUSY)) {
-				mutex_unlock(&cma->lock);
-
-				if (fatal_signal_pending(current))
-					break;
-
+			if (retry_after_sleep < max_retries) {
+				start = 0;
+				/*
+				 * update max retries if available free regions
+				 * are less.
+				 */
+				if (available_regions < 3)
+					max_retries = 25;
+				available_regions = 0;
 				/*
 				 * Page may be momentarily pinned by some other
 				 * process which has been scheduled out, e.g.
