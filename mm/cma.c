@@ -462,7 +462,6 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 	int ret = -ENOMEM;
 	int num_attempts = 0;
 	int max_retries = 5;
-	int retry_after_sleep = 0;
 
 	if (!cma || !cma->count)
 		return NULL;
@@ -489,24 +488,8 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align,
 				bitmap_maxno, start, bitmap_count, mask,
 				offset);
 		if (bitmap_no >= bitmap_maxno) {
-			if (retry_after_sleep < 2) {
-				start = 0;
-				/*
-				 * Page may be momentarily pinned by some other
-				 * process which has been scheduled out, e.g.
-				 * in exit path, during unmap call, or process
-				 * fork and so cannot be freed there. Sleep
-				 * for 100ms and retry the allocation.
-				 */
-				start = 0;
-				ret = -ENOMEM;
-				schedule_timeout_killable(msecs_to_jiffies(100));
-				num_attempts++;
-				continue;
-			} else {
-				mutex_unlock(&cma->lock);
-				break;
-			}
+			mutex_unlock(&cma->lock);
+			break;
 		}
 		bitmap_set(cma->bitmap, bitmap_no, bitmap_count);
 		/*
