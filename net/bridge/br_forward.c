@@ -254,25 +254,26 @@ static void maybe_deliver_addr(struct net_bridge_port *p, struct sk_buff *skb,
 	struct sk_buff *nskb;
 
 	if (!should_deliver(p, skb))
-		return;
+                return;
 
-	/* Even with hairpin, no soliloquies - prevent breaking IPv6 DAD */
-	if (skb->dev == p->dev && ether_addr_equal(src, addr))
-		return;
+        /* Even with hairpin, no soliloquies - prevent breaking IPv6 DAD */
+        if (skb->dev == p->dev && ether_addr_equal(src, addr))
+                return;
 
-	__skb_push(skb, ETH_HLEN);
-	nskb = pskb_copy(skb, GFP_ATOMIC);
-	__skb_pull(skb, ETH_HLEN);
-	if (!nskb) {
-		return;
-	}
+        __skb_push(skb, ETH_HLEN);
+        nskb = pskb_copy(skb, GFP_ATOMIC);
+        __skb_pull(skb, ETH_HLEN);
+        if (!nskb) {
+                dev->stats.tx_dropped++;
+                return;
+        }
 
-	skb = nskb;
-	__skb_pull(skb, ETH_HLEN);
-	if (!is_broadcast_ether_addr(addr))
-		memcpy(eth_hdr(skb)->h_dest, addr, ETH_ALEN);
+        skb = nskb;
+        __skb_pull(skb, ETH_HLEN);
+        if (!is_broadcast_ether_addr(addr))
+                memcpy(eth_hdr(skb)->h_dest, addr, ETH_ALEN);
 
-	__br_forward(p, skb, local_orig);
+        __br_forward(p, skb, local_orig);
 }
 
 /* called with rcu_read_lock */
