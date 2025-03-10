@@ -72,10 +72,10 @@ function clean_all {
 		echo
 		echo -e "${red}Cleaning Kernel Projects .... ${restore}"
 		cd ${kernel_dir}
-		make -s clean
-		make -s -j${cpus} mrproper O=${objdir}
+		#make -s clean
+		#make -s -j${cpus} mrproper O=${objdir}
 		rm -rf out
-		git restore drivers/input/touchscreen/*
+		#git restore drivers/input/touchscreen/*
 }
 function make_config {
 		echo
@@ -100,9 +100,18 @@ function upload()
 {
 curl bashupload.com -T $ZIP_NAME*.zip
 ziped=$ZIP_MOVE/`echo $ZIP_NAME`.zip
-sed -i "4i\FILE_PATH=$ziped" $PWD/upl.sh
+upl=$kernel_dir/upl.sh
+rm -rf $upl
+cd $kernel_dir
+chmod +x $upl
+sed -i "4i\FILE_PATH=$ziped" $upl
 BUILDDATE=`date +"%Y-%m-%d"`
-sed -i '5i\CAPTION="Build Date: '$BUILDDATE' | Type: KSU, AOSP"' $HOME/bool/upl.sh
+sed -i '5i\CAPTION="* Build Date: '$BUILDDATE'' $upl
+sed -i '6i\* Kernel Version: v.4.19.328' $upl
+sed -i '7i\* KSU+NEXT: v.12441' $upl
+sed -i '8i\* SUSFS: v1.5.5' $upl
+sed -i '9i\* Type: AOSP' $upl
+sed -i '10i\* Changes: https://github.com/onettboots/kernel_xiaomi_sm8250_n0/commits/new"' $upl
 }
 
 DATE_START=$(date +"%s")
@@ -187,7 +196,7 @@ case "$variant" in
 esac
 done
 
-BASE_AK_VER="Bool-X-Alioth-V1-RKbase-"
+BASE_AK_VER="Bool-X-Alioth-V1.0-N0base-"
 DATE=`date +"%Y%m%d-%H%M"`
 AK_VER="$BASE_AK_VER$variant"
 ZIP_NAME="$AK_VER"-"$DATE"
