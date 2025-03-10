@@ -20473,10 +20473,11 @@ static int __wlan_hdd_cfg80211_join_ibss(struct wiphy *wiphy,
 			sta_ctx->conn_info.chan_freq);
 	/* Issue connect start */
 	status = wlan_hdd_cfg80211_connect_start(adapter, params->ssid,
-						 params->ssid_len,
-						 bssid.bytes, NULL,
-						 conn_info_channel,
-						 params->chandef.width);
+                                                 params->ssid_len,
+                                                 bssid.bytes, NULL,
+                                                 conn_info_channel,
+                                                 params->chandef.width,
+                                                 0);
 
 	if (0 > status) {
 		hdd_err("connect failed");
